@@ -11,7 +11,7 @@ logical_screen = pygame.Surface((320, 200))
 pygame.display.set_caption('Scotch Engine 1.0')
 
 clock = pygame.time.Clock()
-player = classes.Player(45, 45, 5, 6, 135, 70)
+player = classes.Player(45, 45, 5, 6, 90, 70)
 
 ## load textures
 textures = {}

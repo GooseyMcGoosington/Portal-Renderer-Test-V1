@@ -41,6 +41,7 @@ while True:
     ## handle quit
     for event in pygame.event.get(): # User did something 
         if event.type == pygame.QUIT: # If user clicked close
+            sys.exit()            
             break
     ## handle key input detection
     keyInput = pygame.key.get_pressed()
@@ -84,4 +85,3 @@ while True:
     
     pygame.display.update()
     
-sys.exit()

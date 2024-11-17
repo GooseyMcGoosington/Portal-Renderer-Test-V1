@@ -1,6 +1,6 @@
 from settings import *
 from engine import Engine
-import classes, level
+import classes, sys
 
 ## initialize
 pygame.init()
@@ -41,7 +41,6 @@ while True:
     ## handle quit
     for event in pygame.event.get(): # User did something 
         if event.type == pygame.QUIT: # If user clicked close
-            quit()
             break
     ## handle key input detection
     keyInput = pygame.key.get_pressed()
@@ -84,3 +83,5 @@ while True:
     clock.tick(30)
     
     pygame.display.update()
+    
+sys.exit()

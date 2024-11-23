@@ -1,7 +1,7 @@
 from settings import *
 
 @staticmethod
-@njit(fastmath=True)
+@njit
 def transformVector(v, cs, sn):
     x, y = v
     tx = x*cs-y*sn
@@ -9,16 +9,23 @@ def transformVector(v, cs, sn):
     return (tx, ty)
 
 @staticmethod
-@njit(fastmath=True)
+@njit
 def transformToScreen(f, v):
     x, y, z = v
-    sx = (x/y)*f+W2
-    sy = (z/y)*f+H2
-    return (sx, sy)
+    inv_y = 1 / y  # Avoid repeated division
+    return (x * inv_y * f + W2, z * inv_y * f + H2)
+
+
+@staticmethod
+@njit
+def transformYCoordToScreen(f, v):
+    x, y, z = v
+    inv_y = 1 / y  # Avoid repeated division
+    return z * inv_y * f + H2
 
 # Yuriy Georgiev
 @staticmethod
-@njit(fastmath=True)
+@njit
 def clip(ax, ay, bx, by, px1, py1, px2, py2):
 
     a = (px1 - px2) * (ay - py2) - (py1 - py2) * (ax - px2)
@@ -29,8 +36,9 @@ def clip(ax, ay, bx, by, px1, py1, px2, py2):
     return ax, ay, t
 
 @staticmethod
-@njit(fastmath=True, parallel=True)
-def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx, cy, elevation, is_sky, lighting):
+@njit
+def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx, cy, elevation, is_sky, lighting, c):
+    tanFOV=np.tan(fov/2)
     for x in prange(1, W1):
         Y = lut[x]
         if not is_sky:
@@ -40,10 +48,10 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
             sin_alpha = np.sin(alpha)
             cos_alpha = np.cos(alpha)
         else:
-            angle = np.atan((x-W2)/W2*np.tan(fov/2))
+            angle = np.atan((x-W2)/W2*tanFOV)
             adjusted_angle = np.degrees(yaw + angle)
             texX = int(adjusted_angle/360*texture.shape[0])%texture.shape[0]
-
+        
         direction = Y > H2
         if direction:
             for y in prange(Y, H1):
@@ -61,11 +69,8 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
                             texX = int(wx*texture_scale)%texture.shape[0]
                             texY = int(wy*texture_scale)%texture.shape[1]
 
-                            texX = int(wx*texture_scale)%texture.shape[0]
-                            texY = int(wy*texture_scale)%texture.shape[1]
-
-                            texture_clr = texture[texX, texY]*lighting
-                            screenArray[x, y] = texture_clr
+                            texture_clr = texture[texX, texY]
+                            screenArray[x, y] = (texture_clr[0]*lighting, texture_clr[1]*lighting, texture_clr[2]*lighting)
                         else:
                             if y < texture.shape[1]:
                                 texY = int(y)%texture.shape[1]
@@ -92,10 +97,8 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
                             texX = int(wx*texture_scale)%texture.shape[0]
                             texY = int(wy*texture_scale)%texture.shape[1]
 
-                            texX = int(wx*texture_scale)%texture.shape[0]
-                            texY = int(wy*texture_scale)%texture.shape[1]
-                            texture_clr = texture[texX, texY]*lighting
-                            screenArray[x, y] = texture_clr
+                            texture_clr = texture[texX, texY]
+                            screenArray[x, y] = (texture_clr[0]*lighting, texture_clr[1]*lighting, texture_clr[2]*lighting)
                         else:
                             if y < texture.shape[1]:
                                 texY = int(y)%texture.shape[1]
@@ -108,15 +111,37 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
                                 screenArray[x, y] = texture_col
 
 @staticmethod
-@njit(fastmath=True, parallel=True)
-def rasterize(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, portal_buffer, ceiling_lut, floor_lut, texture, wy0, wy1, t0, t1, wall_length, wall_height, is_sky, yaw, v_offset, lighting):
-    ## cy is distance to camera
-    backfacing = True
-
+@njit
+def is_portal_visible(screenArray, x0, x1, y0, y1, y2, y3):
     if x0 > x1:
         x1, x0 = x0, x1
         y1, y0, y3, y2 = y0, y1, y2, y3
-        backfacing = False
+    dyb = y1-y0
+    dyt = y3-y2
+    dx = max(x1-x0, 1)
+    dyb_dx = dyb / dx
+    dyt_dx = dyt / dx
+    X0 = max(min(int(x0), W1), 1)
+    X1 = max(min(int(x1), W1), 1)
+    obstructed = True
+    for x in prange(X0, X1):
+        Y1 = int(dyb_dx * (x - x0) + y0)
+        Y2 = int(dyt_dx * (x - x0) + y2)
+
+        for y in prange(int(Y2), int(Y1)):
+            if x > 1 and x < W1 and y > 1 and y < H1:
+                colAvg = (screenArray[x, y][0]+screenArray[x, y][1]+screenArray[x, y][2])/3
+                isFilled = colAvg > 0
+                #screenArray[x, y] = (255, 0, 255)
+                if not isFilled:
+                    obstructed = False
+
+    return obstructed
+
+@staticmethod
+@njit
+def rasterize(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, portal_buffer, ceiling_lut, floor_lut, texture, wy0, wy1, t0, t1, wall_length, wall_height, is_sky, yaw, v_offset, lighting):
+    ## cy is distance to camera
 
     def lerp(a, b, c):
         return (1-a)*b + a*c
@@ -127,15 +152,16 @@ def rasterize(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, portal_buffer
 
     X0 = max(min(int(x0), W1), 1)
     X1 = max(min(int(x1), W1), 1)
-
+    dyb_dx = dyb / dx
+    dyt_dx = dyt / dx
     ## texture scaling
-    sf = wall_length/10 # 20 units = repeats 0 times, 40 units = repeats once
+    sf = wall_length*0.1 # 20 units = repeats 0 times, 40 units = repeats once
     texLeft = lerp(t0, 0, sf)
     texRight = lerp(t1, 0, sf)
 
-    for x in prange(X0, X1):
-        Y1=dyb*(x-x0)/dx+y0
-        Y2=dyt*(x-x0)/dx+y2
+    for x in prange(int(X0), int(X1)):
+        Y1 = int(dyb_dx * (x - x0) + y0)
+        Y2 = int(dyt_dx * (x - x0) + y2)
 
         if not is_sky:
             ## textures X
@@ -143,8 +169,7 @@ def rasterize(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, portal_buffer
             z1 = 1/wy1
             t = 0
 
-            if backfacing:
-                t = 1-(x-x0)/(x1-x0)
+            t = 1-(x-x0)/(x1-x0)
             
             top = (1-t)*(texLeft/z0)
             top += t*(texRight/z1)
@@ -156,10 +181,10 @@ def rasterize(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, portal_buffer
             texX = int(texX)%texture.shape[0]
             ##
         else:
-            angle = np.atan((x-W2)/W2*np.tan(1.22173/2))
+            angle = np.atan((x-W2)/W2*0.70020718322)
             adjusted_angle = yaw + np.degrees(angle)
             texX = int(adjusted_angle/360*texture.shape[0])%texture.shape[0]
-            
+
         if int(Y2-Y1) == 0:
             ceiling_lut[x] = Y1
             floor_lut[x] = Y2
@@ -177,22 +202,21 @@ def rasterize(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, portal_buffer
                 if fill_Portal:
                     portal_buffer[x, y] = True
                 else:
-                    if backfacing:
-                        if not isFilled:
-                            if not is_sky:
-                                a = ((y-Y2)/(Y1-Y2))
-                                v = lerp(a, 0, 1*wall_height/5)
-                                texture_col = texture[texX, int(v*texture.shape[1]+v_offset)%texture.shape[1]]
-                                screenArray[x, y] = texture_col*lighting
-                            else:
-                                if y < texture.shape[1]:
-                                    texY = int(y)%texture.shape[1]
-                                    texture_col = texture[texX, texY]
-                                    screenArray[x, y] = texture_col
+                    if not isFilled:
+                        if not is_sky:
+                            a = ((y-Y2)/(Y1-Y2))
+                            v = lerp(a, 0, 1*wall_height*0.2)
+                            texture_col = texture[texX, int(v*texture.shape[1]+v_offset)%texture.shape[1]]
+                            screenArray[x, y] = (texture_col[0]*lighting, texture_col[1]*lighting, texture_col[2]*lighting)
+                        else:
+                            if y < texture.shape[1]:
+                                texY = int(y)%texture.shape[1]
+                                texture_col = texture[texX, texY]
+                                screenArray[x, y] = texture_col
     return ceiling_lut, floor_lut
 
 @staticmethod
-@njit(fastmath=True, parallel=True)
+@njit
 def rasterizeSprite(screenArray, entity_x, entity_y, sprite, entity_depth, entity_scale, f):
     
     sprite_width = sprite.shape[0]
@@ -221,3 +245,11 @@ def rasterizeSprite(screenArray, entity_x, entity_y, sprite, entity_depth, entit
 
                     pixel_col = sprite[texX, texY]
                     screenArray[X, Y] = pixel_col
+
+@staticmethod
+@njit(parallel=True, fastmath=True, cache=True)
+def resetScreenArray(screenArray):
+    for x in prange(screenArray.shape[0]):
+        for y in prange(screenArray.shape[1]):
+            screenArray[x, y] = (0,0,0)
+    return screenArray

@@ -10,13 +10,12 @@ def lerp(t, a, b):
     return a + t * (b - a)
 
 class Engine:
-    def __init__(self, player, screen, mainscreen, textures):
+    def __init__(self, player, screen, textures):
         ## globals
         global screenArray
 
         screenArray=blankScreenArray.copy()
         self.screen=screen
-        self.mainscreen=mainscreen
         self.player:classes.Player=player
         self.textures=textures
     def renderWall(self, wx1, wy1, wx2, wy2, z0, z1, f, c, fillPortal, visPlane, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, v_offset, lighting):
@@ -27,18 +26,18 @@ class Engine:
 
         sx1, sy1 = raster.transformToScreen(f, (wx1, wy1, z0))
         sx2, sy2 = raster.transformToScreen(f, (wx2, wy2, z0))
-        _, sy3 = raster.transformToScreen(f, (wx1, wy1, z1))
-        _, sy4 = raster.transformToScreen(f, (wx2, wy2, z1))
+        sy3 = raster.transformYCoordToScreen(f, (wx1, wy1, z1))
+        sy4 = raster.transformYCoordToScreen(f, (wx2, wy2, z1))
 
         current_ceiling_lut, current_floor_lut = raster.rasterize(screenArray, sx1, sx2, sy1, sy2, sy3, sy4, c, fillPortal, portal_buffer, current_ceiling_lut, current_floor_lut, wall_texture, wy1, wy2, t0, t1, wall_length, wall_height, wall_is_sky, self.player.yaw, v_offset, lighting)
         yaw = np.radians(yaw)
         if visPlane == -1:
-            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting)
-            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting)
+            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting, floor_c)
+            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting, ceiling_c)
         elif visPlane == 1:
-            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting)
+            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting, floor_c)
         elif visPlane == 2:
-            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting)
+            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting, ceiling_c)
 
     def renderSector(self, sector, yaw):
         if sector in sectors_traversed:
@@ -72,16 +71,18 @@ class Engine:
             e=cz-entity.z-entity.h
             sx0, sy0 = raster.transformToScreen(f, (wx0, wy0, e))
             raster.rasterizeSprite(screenArray, sx0, sy0, sprite, wy0, entity.scale, f)
-        
+            
         lighting = sector.lighting
 
         # do wall rendering last
         for wall in sector.walls:
+            wall_p1 = wall.p1
+            wall_p2 = wall.p2
             c=wall.c
-            rx1 = wall.x1-cx
-            ry1 = wall.y1-cy
-            rx2 = wall.x2-cx
-            ry2 = wall.y2-cy
+            rx1 = wall_p1[0]-cx
+            ry1 = wall_p1[1]-cy
+            rx2 = wall_p2[0]-cx
+            ry2 = wall_p2[1]-cy
 
             def_01_is_portal = wall.def_1_portal
             def_02_is_portal = wall.def_2_portal
@@ -100,18 +101,22 @@ class Engine:
 
             wx1, wy1 = raster.transformVector((rx1, ry1), cs, sn)
             wx2, wy2 = raster.transformVector((rx2, ry2), cs, sn)
+
+            nx1, ny1 = wx1, wy1
+            nx2, ny2 = wx2, wy2
+
             if wy1 < 1 and wy2 < 1:
                 continue
             elif wy1 < 1:
                 wx1, wy1, t = raster.clip(wx1, wy1, wx2, wy2, 1, 1, W, 1)
-                t1 += t/self.player.fovWidthAtY
+                t1 += t/self.player.fovWidthAtY**0.5
             elif wy2 < 1:
                 wx2, wy2, t = raster.clip(wx2, wy2, wx1, wy1, 1, 1, W, 1)
-                t0 -= t/self.player.fovWidthAtY
+                t0 -= t/self.player.fovWidthAtY**0.5
 
             ## figure out what side we're at relative to the segment
-            wall_normal_x = wall.y2-wall.y1
-            wall_normal_y = -(wall.x2-wall.x1)
+            wall_normal_x = wall_p2[1]-wall_p1[1]
+            wall_normal_y = -(wall_p2[0]-wall_p1[0])
             side = (wall_normal_x * rx1) + (wall_normal_y * ry1)
             side = side > 0 and 1 or side < 0 and -1 or 0
             # 1 = Right, -1 = Left, 0 = Colinear
@@ -148,14 +153,22 @@ class Engine:
                 wall_height = portal_top
                 self.renderWall(wx1, wy1, wx2, wy2, wall_portion_02, wall_top, f, c, False, 2, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting)
                 # we now know where we rendered the bottom of the top portion and the top of the bottom portion, now we can draw the portal
-                self.renderWall(wx1, wy1, wx2, wy2, wall_portion_01, wall_portion_02, f, (127, 0, 255), True, 0, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting)
+               # self.renderWall(nx1, ny1, nx2, ny2, wall_portion_01, wall_portion_02, f, (127, 0, 255), True, 0, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting)
                 wall_height = sector_height+sector_elevation
                 if not sector in portal_queue:
-                    portalSector = level.sectors[portal_to_render]
-                    portal_queue.append(portalSector)
+                    
+                    sx1, sy1 = raster.transformToScreen(f, (nx1, ny1, wall_portion_01))
+                    sx2, sy2 = raster.transformToScreen(f, (nx2, ny2, wall_portion_01))
+                    sy3 = raster.transformYCoordToScreen(f, (nx1, ny1, wall_portion_02))
+                    sy4 = raster.transformYCoordToScreen(f, (nx2, ny2, wall_portion_02))
+                    portal_occluded = raster.is_portal_visible(screenArray, sx1, sx2, sy1, sy2, sy3, sy4)
+                    if not portal_occluded:
+                        portalSector = level.sectors[portal_to_render]
+                        portal_queue.append(portalSector)
         sectors_traversed.append(sector)
-        for portalSector in portal_queue:
-            self.renderSector(portalSector, yaw)
+        if len(portal_queue) > 0:
+            for portalSector in portal_queue:
+                self.renderSector(portalSector, yaw)
 
     def update(self, dt):
         ## globals
@@ -166,11 +179,8 @@ class Engine:
         in_sector = self.find_sector_from_point(self.player.x, self.player.y)
         if in_sector != None:
             self.player.currentSector = in_sector
-        else:
-            print('Out of bounds, and there is no sector set.')
-            return
         self.player.vz -= 9.82
-        self.player.z += self.player.vz*dt
+        self.player.z += self.player.vz/dt
         if self.player.z < self.player.currentSector.e:
             # they've hit the floor
             self.player.vz = 0
@@ -201,14 +211,21 @@ class Engine:
         global screenArray
 
         pygame.surfarray.blit_array(self.screen, screenArray)
-        scaled_surface = pygame.transform.scale(self.screen, (1280, 720))
-        self.mainscreen.blit(scaled_surface, (0, 0))
-        screenArray.fill(0)
+        pygame.display.update()
+        screenArray = blankScreenArray.copy()
+        """
+        buffer = (ctypes.c_uint8 * (W * H * 3)).from_buffer(screenArray)
+        ctypes.memset(ctypes.addressof(buffer), 0, len(buffer))
+        """
+        
     def point_in_polygon(self, cx, cy, walls):
         # Cast a ray to the right and count intersections
         intersections = 0
         for wall in walls:
-            x0, y0, x1, y1 = wall.x1, wall.y1, wall.x2, wall.y2
+            p1 = wall.p1
+            p2 = wall.p2
+            x0, y0 = p1
+            x1, y1 = p2
             # Check if the point is on an edge
             if (min(y0, y1) <= cy < max(y0, y1)) and (cx < max(x0, x1)):
                 if (y1 - y0) != 0:  # Avoid division by zero

@@ -43,4 +43,5 @@ sector5.walls = [
     classes.Segment(-60, -110, -60, -90, False, None, False, None, 0, 5, GREEN, 'tile068', 'tile085', 'tile085', 4, 4),
     classes.Segment(20, -110, -60, -110, False, None, False, None, 0, 5, GREEN, 'tile068', 'tile085', 'tile085', 4, 4),
 ]
+
 sectors = [sector1, sector2, sector3, sector4, sector5]

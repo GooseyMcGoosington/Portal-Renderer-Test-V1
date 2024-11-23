@@ -73,10 +73,8 @@ class Player:
         
 class Segment:
     def __init__(self, x1, y1, x2, y2, def_1_portal, def_1_link, def_2_portal, def_2_link, portal_bottom, portal_top, c, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale):
-        self.x1=x1
-        self.y1=y1
-        self.x2=x2
-        self.y2=y2
+        self.p1 = vec2(x1, y1)
+        self.p2 = vec2(x2, y2)
         self.def_1_portal=def_1_portal
         self.def_1_link=def_1_link
         self.def_2_portal=def_2_portal

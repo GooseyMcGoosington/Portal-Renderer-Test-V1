@@ -4,13 +4,19 @@ import classes
 entity = classes.Entity(40, -60, 0, 0, 3, 16, 'box', 32, True)
 sector1=classes.Area(20, 0, (127, 127, 127), (127, 127, 127), [entity], 0.5)
 sector1.walls = [
-    classes.Segment(0, 0, 0, 100, False, None, False, None, 0, 0, RED, 'sky', 'tile032', 'sky', 4, 4),
-    classes.Segment(0, 100, 100, 100, False, None, False, None, 0, 0, GREEN, 'sky', 'tile032', 'sky', 4, 4),
-    classes.Segment(100, 100, 100, 0, False, None, False, None, 0, 0, BLUE, 'sky', 'tile032', 'sky', 4, 4),
-    classes.Segment(100, 0, 60, 0, False, None, False, None, 0, 5, GREEN, 'tile021', 'tile032', 'sky', 4, 4), # def 1 leads into sector2, def2 leads into sector0
-    classes.Segment(60, 0, 50, 0, True, 1, True, 1, 0, 5, GREEN, 'tile021', 'tile032', 'sky', 4, 4), # def 1 leads into sector2, def2 leads into sector0
-    classes.Segment(50, 0, 40, 0, True, 1, True, 1, 0, 5, GREEN, 'tile021', 'tile032', 'sky', 4, 4), # def 1 leads into sector2, def2 leads into sector0
-    classes.Segment(40, 0, 0, 0, False, None, False, None, 0, 5, GREEN, 'tile021', 'tile032', 'sky', 4, 4) # def 1 leads into sector2, def2 leads into sector0
+    classes.Segment(0, 0, 0, 25, False, None, False, None, 0, 0, RED, 'tile000', 'tile092', 'sky', 4, 4),
+    classes.Segment(0, 75, 0, 100, False, None, False, None, 0, 0, RED, 'tile000', 'tile092', 'sky', 4, 4),
+    
+    classes.Segment(-50, 75, 0, 75, False, None, False, None, 0, 0, RED, 'tile000', 'tile092', 'sky', 4, 4),
+    classes.Segment(0, 25, -50, 25, False, None, False, None, 0, 0, RED, 'tile000', 'tile092', 'sky', 4, 4),
+    classes.Segment(-50, 25, -50, 75, False, None, False, None, 0, 0, RED, 'tile000', 'tile092', 'sky', 4, 4),
+
+    classes.Segment(0, 100, 100, 100, False, None, False, None, 0, 0, GREEN, 'tile000', 'tile092', 'sky', 4, 4),
+    classes.Segment(100, 100, 100, 0, False, None, False, None, 0, 0, BLUE, 'tile000', 'tile092', 'sky', 4, 4),
+    classes.Segment(100, 0, 60, 0, False, None, False, None, 0, 5, GREEN, 'tile000', 'tile092', 'sky', 4, 4), # def 1 leads into sector2, def2 leads into sector0
+    classes.Segment(60, 0, 50, 0, True, 1, True, 1, 0, 5, GREEN, 'tile000', 'tile092', 'sky', 4, 4), # def 1 leads into sector2, def2 leads into sector0
+    classes.Segment(50, 0, 40, 0, True, 1, True, 1, 0, 5, GREEN, 'tile000', 'tile092', 'sky', 4, 4), # def 1 leads into sector2, def2 leads into sector0
+    classes.Segment(40, 0, 0, 0, False, None, False, None, 0, 5, GREEN, 'tile000', 'tile092', 'sky', 4, 4) # def 1 leads into sector2, def2 leads into sector0
 ]
 sector2=classes.Area(20, 0, (127, 127, 127), (127, 127, 127), [], 1)
 sector2.walls = [

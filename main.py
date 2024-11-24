@@ -1,12 +1,12 @@
 from settings import *
 from engine import Engine
-import classes, sys
+import classes, sys, level, raster
 
 ## initialize
 pygame.init()
 pygame.mixer.init()
 
-screen = pygame.display.set_mode((320, 200))
+screen = pygame.display.set_mode((W, H))
 pygame.display.set_caption('Scotch Engine 1.0')
 
 clock = pygame.time.Clock()
@@ -37,13 +37,14 @@ screenshotHeld = False
 
 avgFPS = 0
 avg = 0
+drawMap = False
 
 def halt():
     print(round(avgFPS/avg, 1), ' was the average FPS this session')
     sys.exit()      
           
 while True:
-    deltaTime = max(clock.tick(30), 1)
+    deltaTime = max(clock.tick(), 1)
     ## handle quit
     for event in pygame.event.get(): # User did something 
         if event.type == pygame.QUIT: # If user clicked close
@@ -78,8 +79,26 @@ while True:
     player.yaw %= 360
     player.yaw = max(player.yaw, 0)
     ## handle the engine stuff now
-    Engine.update(deltaTime)
-    Engine.draw()
+    if drawMap:
+        s = 1.2
+        for sector in level.sectors:
+            for wall in sector.walls:
+                pygame.draw.line(screen, (255, 0, 0), vec2(wall.p1.x/s, wall.p1.y/s) + vec2(W2, H2), vec2(wall.p2.x/s, wall.p2.y/s) + vec2(W2, H2), 1)
+                # draw wall normal
+                dy, dx = raster.get_segment_normal(wall.p1.x, wall.p1.y, wall.p2.x, wall.p2.y)
+                normal = vec2(dy, dx)*4
+                midpoint = (vec2(wall.p1.x, wall.p1.y) + vec2(wall.p2.x, wall.p2.y)) / 2 / s
+                midpoint_screen = midpoint + vec2(W2, H2)
+
+                normal_end = midpoint_screen+normal
+
+                # Draw the normal as a line
+                pygame.draw.line(screen, (0, 255, 0), midpoint_screen, normal_end, 1)  # Green line 
+
+        pygame.display.update()
+    else:
+        Engine.update(deltaTime)
+        Engine.draw()
     ## fps text
     pygame.display.set_caption(f'{clock.get_fps() :.1f}')
     avgFPS += clock.get_fps()

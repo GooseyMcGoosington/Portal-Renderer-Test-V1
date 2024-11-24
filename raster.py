@@ -163,7 +163,7 @@ def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, porta
                     else:
                         # Wall texture rendering
                         a = (y - Y2) / (Y1 - Y2)
-                        v = lerp(a, 0, wall_height * 0.2)
+                        v = lerp(a*wall_height*0.2, 0, 1)
                         texY = int(v * texture.shape[1] + v_offset) % texture.shape[1]
                         texture_col = texture[texX, texY]
                         screenArray[x, y] = (

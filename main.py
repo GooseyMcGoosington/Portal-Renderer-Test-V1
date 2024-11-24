@@ -10,7 +10,7 @@ screen = pygame.display.set_mode((W, H))
 pygame.display.set_caption('Scotch Engine 1.0')
 
 clock = pygame.time.Clock()
-player = classes.Player(45, 45, 5, 6, 180, 70)
+player = classes.Player(45, -25, 5, 6, 180, 70)
 
 ## load textures
 textures = {}
@@ -44,7 +44,7 @@ def halt():
     sys.exit()      
           
 while True:
-    deltaTime = max(clock.tick(), 1)
+    deltaTime = max(clock.tick(30), 1)
     ## handle quit
     for event in pygame.event.get(): # User did something 
         if event.type == pygame.QUIT: # If user clicked close

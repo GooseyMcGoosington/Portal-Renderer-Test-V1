@@ -143,10 +143,12 @@ class Engine:
                 wall_portion_02 = wall_top+portal_top
                 #wall_height_top = portal_top
                 if wy1 > 1 and wy2 > 1:
+                    wall_height = portal_bottom
                     self.renderWall(wx1, wy1, wx2, wy2, wall_bottom, wall_portion_01, f, c, False, 1, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, -40, lighting)
+                    wall_height = portal_top
                     self.renderWall(wx1, wy1, wx2, wy2, wall_portion_02, wall_top, f, c, False, 2, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting)
+                    wall_height = sector_height+sector_elevation
                 # we now know where we rendered the bottom of the top portion and the top of the bottom portion, now we can draw the portal
-                wall_height = sector_height+sector_elevation
                 if not sector in portal_queue:
                     sx1, sy1 = raster.transformToScreen(f, (wx1, wy1, wall_portion_01))
                     sx2, sy2 = raster.transformToScreen(f, (wx2, wy2, wall_portion_01))
@@ -205,7 +207,7 @@ class Engine:
 
         pygame.surfarray.blit_array(self.screen, screenArray)
         pygame.display.update()
-        screenArray = blankScreenArray.copy()
+        screenArray[:, :] = (0,0,0)
         """buffer = (ctypes.c_uint8 * (W * H * 3)).from_buffer(screenArray)
         ctypes.memset(ctypes.addressof(buffer), 0, len(buffer))"""
         

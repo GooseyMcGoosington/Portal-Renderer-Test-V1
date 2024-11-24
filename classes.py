@@ -67,8 +67,8 @@ class Player:
         FOV=math.radians(FOV)
         self.FOV=FOV
         self.FocalLength=W/2/math.tan(FOV/2)
-        self.viewWidth = math.tan(FOV/2) * 2 * aspectRatio
-        self.fovWidthAtY = (self.viewWidth*1)/2
+        self.viewWidth = math.tan(FOV/2) * 1
+        self.fovWidthAtY = self.viewWidth*aspectRatio*0.9
         self.currentSector=None
         
 class Segment:

@@ -69,7 +69,7 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
                             texY = int(wy*texture_scale)%texture.shape[1]
 
                             texture_clr = texture[texX, texY]
-                            screenArray[x, y] = (texture_clr[0]*lighting, texture_clr[1]*lighting, texture_clr[2]*lighting)
+                            screenArray[x, y] = (texture_clr[0], texture_clr[1], texture_clr[2])
                         else:
                             if y < texture.shape[1]:
                                 texY = int(y)%texture.shape[1]
@@ -97,7 +97,7 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
                             texY = int(wy*texture_scale)%texture.shape[1]
 
                             texture_clr = texture[texX, texY]
-                            screenArray[x, y] = (texture_clr[0]*lighting, texture_clr[1]*lighting, texture_clr[2]*lighting)
+                            screenArray[x, y] = (texture_clr[0], texture_clr[1], texture_clr[2])
                         else:
                             if y < texture.shape[1]:
                                 texY = int(y)%texture.shape[1]
@@ -116,7 +116,7 @@ def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, porta
         return (1 - a) * b + a * c
 
     dx = max(x1 - x0, 1)
-    sf = wall_length * 0.1  # Texture scaling factor
+    sf = wall_length * 1  # Texture scaling factor
     texLeft = lerp(t0, 0, sf)
     texRight = lerp(t1, 0, sf)
 
@@ -131,7 +131,7 @@ def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, porta
         t = (x - x0) / dx
         Y1 = int(lerp(t, y0, y1))
         Y2 = int(lerp(t, y2, y3))
-
+        
         if is_sky:
             angle = np.atan((x - W2) / W2 * 0.70020718322)
             adjusted_angle = yaw + np.degrees(angle)
@@ -163,13 +163,13 @@ def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, porta
                     else:
                         # Wall texture rendering
                         a = (y - Y2) / (Y1 - Y2)
-                        v = lerp(a*wall_height*0.2, 0, 1)
+                        v = lerp(a*wall_height*0.1, 0, 1)
                         texY = int(v * texture.shape[1] + v_offset) % texture.shape[1]
                         texture_col = texture[texX, texY]
                         screenArray[x, y] = (
-                            texture_col[0] * lighting,
-                            texture_col[1] * lighting,
-                            texture_col[2] * lighting,
+                            texture_col[0],
+                            texture_col[1],
+                            texture_col[2],
                         )
     return ceiling_lut, floor_lut
 

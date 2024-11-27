@@ -10,12 +10,13 @@ def lerp(t, a, b):
     return a + t * (b - a)
 
 class Engine:
-    def __init__(self, player, screen, textures):
+    def __init__(self, player, main_screen, logical_screen, textures):
         ## globals
         global screenArray
 
         screenArray=blankScreenArray.copy()
-        self.screen=screen
+        self.screen=logical_screen
+        self.main_screen=main_screen
         self.player:classes.Player=player
         self.textures=textures
     def renderWall(self, wx1, wy1, wx2, wy2, z0, z1, f, c, fillPortal, visPlane, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, v_offset, lighting):
@@ -113,12 +114,12 @@ class Engine:
             # we find out what side is being drawn, check if we can draw a portal and change how we rasterize the wall
             portal_to_render = None
 
-            wall_is_sky = wall_texture == 'sky'
-            ceiling_is_sky = ceiling_texture == 'sky'
-
-            wall_texture = self.textures[wall_texture][0]
-            floor_texture = self.textures[floor_texture][0]
-            ceiling_texture = self.textures[ceiling_texture][0]
+            wall_is_sky = wall_texture[2] == 'sky'
+            ceiling_is_sky = ceiling_texture[2] == 'sky'
+            
+            wall_texture = wall_texture[0]
+            floor_texture = floor_texture[0]
+            ceiling_texture = ceiling_texture[0]
             if side == 1:
                 if def_02_is_portal:
                     portal_to_render = def_02_portal_link
@@ -156,14 +157,18 @@ class Engine:
                     sy4 = raster.transformYCoordToScreen(f, (wx2, wy2, wall_portion_02))
                     #portal_occluded = raster.is_portal_visible(screenArray, sx1, sx2, sy1, sy2, sy3, sy4)
                     portalSector = level.sectors[portal_to_render]
-                    portal_array = [portalSector, sx1, sx2, sy1, sy2, sy3, sy4]
+                    portal_center = (wall.p1+wall.p2)/2
+                    portal_distance = vec2.magnitude(vec2(self.player.x, self.player.y)-portal_center)
+
+                    portal_array = [portalSector, sx1, sx2, sy1, sy2, sy3, sy4, portal_distance]
                     portal_queue.append(portal_array)
         ## render portals   
         sectors_traversed.append(sector)
         if len(portal_queue) > 0:
-            for portalArray in portal_queue:
+            portal_queue_sorted = sorted(portal_queue, key=lambda portal_array: portal_array[7])
+            for portalArray in portal_queue_sorted:
                 # we will visualize the portals first
-                portal_linked_sector, sx1, sx2, sy1, sy2, sy3, sy4 = portalArray
+                portal_linked_sector, sx1, sx2, sy1, sy2, sy3, sy4, _ = portalArray
                 obstructed = raster.rasterizePortal(screenArray, portal_buffer, sx1, sx2, sy1, sy2, sy3, sy4, PINK, 1)
                 if not obstructed:
                     self.renderSector(portal_linked_sector, yaw)
@@ -206,8 +211,10 @@ class Engine:
         global screenArray
 
         pygame.surfarray.blit_array(self.screen, screenArray)
+        scaled_surface = pygame.transform.scale(self.screen, (1920, 1019))
+        self.main_screen.blit(scaled_surface, (0, 0))
         pygame.display.update()
-        screenArray[:, :] = (0,0,0)
+        screenArray = blankScreenArray.copy()
         """buffer = (ctypes.c_uint8 * (W * H * 3)).from_buffer(screenArray)
         ctypes.memset(ctypes.addressof(buffer), 0, len(buffer))"""
         

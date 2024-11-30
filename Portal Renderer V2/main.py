@@ -9,7 +9,7 @@ mainscreen = pygame.display.set_mode((W, H))
 pygame.display.set_caption('Scotch Engine 1.0')
 
 clock = pygame.time.Clock()
-player = classes.Player(vec3(5, 50, 5), vec3(0, 0, 0), 0)
+player = classes.Player(vec3(15, 50, 5), vec3(0, 0, 0), 0)
 Engine = engine.Engine(player, mainscreen)
 mainfont = pygame.font.SysFont(None, 48)
 

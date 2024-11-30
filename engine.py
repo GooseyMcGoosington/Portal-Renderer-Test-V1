@@ -19,7 +19,10 @@ class Engine:
         self.main_screen=main_screen
         self.player:classes.Player=player
         self.textures=textures
-    def renderWall(self, wx1, wy1, wx2, wy2, z0, z1, f, c, fillPortal, visPlane, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, v_offset, lighting):
+        self.traversed_portals=[]
+        self.portal_buffer=blank_portal_buffer.copy()
+        
+    def renderWall(self, wx1, wy1, wx2, wy2, z0, z1, f, c, visPlane, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, v_offset, lighting, check_portal_buffer, clipping_bounds):
         cx, cy = self.player.x, self.player.y
 
         current_ceiling_lut = [0]*W
@@ -30,19 +33,28 @@ class Engine:
         sy3 = raster.transformYCoordToScreen(f, (wx1, wy1, z1))
         sy4 = raster.transformYCoordToScreen(f, (wx2, wy2, z1))
 
-        current_ceiling_lut, current_floor_lut = raster.rasterizeTextured(screenArray, sx1, sx2, sy1, sy2, sy3, sy4, c, fillPortal, portal_buffer, current_ceiling_lut, current_floor_lut, wall_texture, wy1, wy2, t0, t1, wall_length, wall_height, wall_is_sky, self.player.yaw, v_offset, lighting)
+        current_ceiling_lut, current_floor_lut = raster.rasterizeTextured(screenArray, sx1, sx2, sy1, sy2, sy3, sy4, c, self.portal_buffer, current_ceiling_lut, current_floor_lut, wall_texture, wy1, wy2, t0, t1, wall_length, wall_height, wall_is_sky, self.player.yaw, v_offset, lighting, check_portal_buffer)
         yaw = np.radians(yaw)
         if visPlane == -1:
-            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting, floor_c)
-            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting, ceiling_c)
+            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting, floor_c, self.portal_buffer, check_portal_buffer)
+            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting, ceiling_c, self.portal_buffer, check_portal_buffer)
         elif visPlane == 1:
-            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting, floor_c)
+            raster.rasterizeVisplane(screenArray, current_ceiling_lut, floor_texture, floor_texture_scale, fov, f, yaw, cx, cy, floor_distance, False, lighting, floor_c, self.portal_buffer, check_portal_buffer)
         elif visPlane == 2:
-            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting, ceiling_c)
+            raster.rasterizeVisplane(screenArray, current_floor_lut, ceiling_texture, ceiling_texture_scale, fov, f, yaw, cx, cy, ceiling_distance, ceiling_is_sky, lighting, ceiling_c, self.portal_buffer, check_portal_buffer)
 
-    def renderSector(self, sector, yaw):
+    def renderSector(self, sector: classes.Area, lastSector: classes.Area, yaw, check_portal_buffer: bool, clipping_bounds):
         if sector in sectors_traversed:
             return
+        use_alternate_texture = False
+        if sector.lighting_effect == 1:
+            if sector.flicker_wait <= 5 or sector.flicker_wait == 22:
+                use_alternate_texture = True
+            else:
+                use_alternate_texture = False
+            sector.flicker_wait += 1
+            sector.flicker_wait %= 30
+
         cx, cy, cz = self.player.x, self.player.y, self.player.z
         cs, sn = cos[yaw], sin[yaw]
         if sector == None:
@@ -55,7 +67,6 @@ class Engine:
         floor_c = sector.fc
         f = self.player.FocalLength
         fov = self.player.FOV
-        portal_buffer=blankScreenArray.copy()
         portal_queue = []
         cz = self.player.z+self.player.h
         floor_distance = cz-sector.e
@@ -82,13 +93,17 @@ class Engine:
             ry2 = wall_p2[1]-cy
 
             def_01_is_portal = wall.def_1_portal
-            def_02_is_portal = wall.def_2_portal
             def_01_portal_link = wall.def_1_link
-            def_02_portal_link = wall.def_2_link
 
-            wall_texture=wall.wall_texture
-            floor_texture=wall.floor_texture
-            ceiling_texture=wall.ceiling_texture
+            if use_alternate_texture:
+                wall_texture=wall.alt_wall_texture
+                floor_texture=wall.alt_floor_texture
+                ceiling_texture=wall.alt_ceiling_texture
+            else:
+                wall_texture=wall.wall_texture
+                floor_texture=wall.floor_texture
+                ceiling_texture=wall.ceiling_texture
+
             floor_texture_scale=wall.floor_texture_scale
             ceiling_texture_scale=wall.ceiling_texture_scale
 
@@ -97,7 +112,6 @@ class Engine:
             t0, t1 = 0, 1
             wx1, wy1 = raster.transformVector((rx1, ry1), cs, sn)
             wx2, wy2 = raster.transformVector((rx2, ry2), cs, sn)
-            
             if wy1 < 1:
                 wx1, wy1, t = raster.clip(wx1, wy1, wx2, wy2, 1, 1, W, 1)
                 t1 += t/self.player.fovWidthAtY
@@ -112,7 +126,6 @@ class Engine:
             side = side > 0 and 1 or side < 0 and -1 or 0
             # 1 = Right, -1 = Left, 0 = Colinear
             # we find out what side is being drawn, check if we can draw a portal and change how we rasterize the wall
-            portal_to_render = None
 
             wall_is_sky = wall_texture[2] == 'sky'
             ceiling_is_sky = ceiling_texture[2] == 'sky'
@@ -120,64 +133,52 @@ class Engine:
             wall_texture = wall_texture[0]
             floor_texture = floor_texture[0]
             ceiling_texture = ceiling_texture[0]
-            if side == 1:
-                if def_02_is_portal:
-                    portal_to_render = def_02_portal_link
-            elif side == -1:
-                if def_01_is_portal:
-                    portal_to_render = def_01_portal_link
-            if portal_to_render == None:
-                if wy1 > 1 and wy2 > 1:
-                    z0 = cz-sector_elevation
-                    z1 = z0-sector_height
-                    self.renderWall(wx1, wy1, wx2, wy2, z0, z1, f, c, False, -1, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting)
-                else:
-                    continue
-            else:
-                portal_bottom = wall.portal_bottom
-                portal_top = wall.portal_top
-                # we have a portal, so we are going to split the sector into two first. we will also check how high and how low can the portal be?
-                wall_bottom = cz-sector_elevation # this is the bottom of the sector
-                wall_portion_01 = wall_bottom-portal_bottom
-                #wall_height_bottom = portal_bottom
-                wall_top = wall_bottom-sector_height # this is the top of the sector
-                wall_portion_02 = wall_top+portal_top
-                #wall_height_top = portal_top
-                if wy1 > 1 and wy2 > 1:
-                    wall_height = portal_bottom
-                    self.renderWall(wx1, wy1, wx2, wy2, wall_bottom, wall_portion_01, f, c, False, 1, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, -40, lighting)
-                    wall_height = portal_top
-                    self.renderWall(wx1, wy1, wx2, wy2, wall_portion_02, wall_top, f, c, False, 2, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting)
-                    wall_height = sector_height+sector_elevation
-                # we now know where we rendered the bottom of the top portion and the top of the bottom portion, now we can draw the portal
-                if not sector in portal_queue:
-                    sx1, sy1 = raster.transformToScreen(f, (wx1, wy1, wall_portion_01))
-                    sx2, sy2 = raster.transformToScreen(f, (wx2, wy2, wall_portion_01))
-                    sy3 = raster.transformYCoordToScreen(f, (wx1, wy1, wall_portion_02))
-                    sy4 = raster.transformYCoordToScreen(f, (wx2, wy2, wall_portion_02))
-                    #portal_occluded = raster.is_portal_visible(screenArray, sx1, sx2, sy1, sy2, sy3, sy4)
-                    portalSector = level.sectors[portal_to_render]
-                    portal_center = (wall.p1+wall.p2)/2
-                    portal_distance = vec2.magnitude(vec2(self.player.x, self.player.y)-portal_center)
 
-                    portal_array = [portalSector, sx1, sx2, sy1, sy2, sy3, sy4, portal_distance]
-                    portal_queue.append(portal_array)
-        ## render portals   
-        sectors_traversed.append(sector)
-        if len(portal_queue) > 0:
-            portal_queue_sorted = sorted(portal_queue, key=lambda portal_array: portal_array[7])
-            for portalArray in portal_queue_sorted:
-                # we will visualize the portals first
-                portal_linked_sector, sx1, sx2, sy1, sy2, sy3, sy4, _ = portalArray
-                obstructed = raster.rasterizePortal(screenArray, portal_buffer, sx1, sx2, sy1, sy2, sy3, sy4, PINK, 1)
-                if not obstructed:
-                    self.renderSector(portal_linked_sector, yaw)
+            if side == -1:
+                if not def_01_is_portal:
+                    if wy1 > 1 and wy2 > 1:
+                        z0 = cz-sector_elevation
+                        z1 = z0-sector_height
+                        self.renderWall(wx1, wy1, wx2, wy2, z0, z1, f, c, -1, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting, check_portal_buffer, clipping_bounds)
+                    else:
+                        continue
+                else:
+                    portal_bottom = wall.portal_bottom
+                    portal_top = wall.portal_top
+                    # we have a portal, so we are going to split the sector into two first. we will also check how high and how low can the portal be?
+                    wall_bottom = cz-sector_elevation # this is the bottom of the sector
+                    wall_portion_01 = wall_bottom-portal_bottom
+                    #wall_height_bottom = portal_bottom
+                    wall_top = wall_bottom-sector_height # this is the top of the sector
+                    wall_portion_02 = wall_top+portal_top
+                    #wall_height_top = portal_top
+                    if wy1 > 1 and wy2 > 1:
+                        wall_height = portal_bottom
+                        self.renderWall(wx1, wy1, wx2, wy2, wall_bottom, wall_portion_01, f, c, 1, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, -40, lighting, check_portal_buffer, clipping_bounds)
+                        wall_height = portal_top
+                        self.renderWall(wx1, wy1, wx2, wy2, wall_portion_02, wall_top, f, c, 2, ceiling_c, floor_c, t0, t1, wall_length, fov, yaw, wall_texture, floor_texture, ceiling_texture, floor_texture_scale, ceiling_texture_scale, ceiling_distance, floor_distance, wall_height, wall_is_sky, ceiling_is_sky, 0, lighting, check_portal_buffer, clipping_bounds)
+                        wall_height = sector_height+sector_elevation
+                    # we now know where we rendered the bottom of the top portion and the top of the bottom portion, now we can draw the portal
+                    if not sector in portal_queue:
+                        sx1, sy1 = raster.transformToScreen(f, (wx1, wy1, wall_portion_01))
+                        sx2, sy2 = raster.transformToScreen(f, (wx2, wy2, wall_portion_01))
+                        sy3 = raster.transformYCoordToScreen(f, (wx1, wy1, wall_portion_02))
+                        sy4 = raster.transformYCoordToScreen(f, (wx2, wy2, wall_portion_02))
+                        #portal_occluded = raster.is_portal_visible(screenArray, sx1, sx2, sy1, sy2, sy3, sy4)
+                        portalSector = level.sectors[def_01_portal_link]
+                        portal_array = [portalSector, sx1, sx2, sy1, sy2, sy3, sy4, wall]
+                        portal_queue.append(portal_array)
+        self.portal_buffer=blank_portal_buffer.copy()                
+        for portal in portal_queue:
+            portalSector, sx1, sx2, sy1, sy2, sy3, sy4, wall = portal
+            if not portalSector in self.traversed_portals and portalSector != lastSector:
+                raster.rasterizePortal(screenArray, sx1, sx2, sy1, sy2, sy3, sy4, RED, self.portal_buffer, clipping_bounds)
+                self.renderSector(portalSector, sector, yaw, True, (sx1, sx2, sy3, sy1))
 
     def update(self, dt):
         ## globals
-        global screenArray, portal_buffer, sectors_traversed
+        global screenArray, sectors_traversed
         sectors_traversed = []
-        portal_buffer = blank_portal_buffer.copy()
         in_sector = self.find_sector_from_point(self.player.x, self.player.y)
         if in_sector != None:
             self.player.currentSector = in_sector
@@ -204,14 +205,14 @@ class Engine:
                         entity.checkTouch(self.player.x, self.player.y, sector, entity)
             ## draw the current sector
             yaw = int(self.player.yaw)%360
-            self.renderSector(self.player.currentSector, yaw)
-
+            self.renderSector(self.player.currentSector, None, yaw, False, (1, W1, 1, H1))
+            self.traversed_portals = []
     def draw(self):
         ## globals
         global screenArray
 
         pygame.surfarray.blit_array(self.screen, screenArray)
-        scaled_surface = pygame.transform.scale(self.screen, (1920, 1019))
+        scaled_surface = pygame.transform.scale(self.screen, (640, 480))
         self.main_screen.blit(scaled_surface, (0, 0))
         pygame.display.update()
         screenArray = blankScreenArray.copy()

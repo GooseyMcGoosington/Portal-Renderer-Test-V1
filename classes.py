@@ -90,7 +90,7 @@ class Segment:
         self.c=c
 
 class Area:
-    def __init__(self, h, e, f_col, c_col, entities, lighting):
+    def __init__(self, id, h, e, f_col, c_col, entities, lighting, lighting_effect):
         self.h=h
         self.e=e
         self.fc=f_col
@@ -98,3 +98,6 @@ class Area:
         self.walls=[]
         self.entities=entities
         self.lighting=lighting
+        self.lighting_effect=lighting_effect
+        self.flicker_wait=0
+        self.id=id

@@ -6,14 +6,15 @@ import classes, sys, level, raster
 pygame.init()
 pygame.mixer.init()
 
-mainscreen = pygame.display.set_mode((1920, 1019))
+## todo; fix portal visibility
+mainscreen = pygame.display.set_mode((640, 480))
 logical_screen = pygame.Surface((W, H))
 
-pygame.display.set_caption('Scotch Engine 1.0')
+pygame.display.set_caption('Scotch Engine 1.1')
 
 level.init_textures()
 clock = pygame.time.Clock()
-player = classes.Player(0, 40, 5, 6, 180, 70)
+player = classes.Player(0, 40, 5, 6, 235, 70)
 
 ## load textures
 textures = {}
@@ -46,7 +47,7 @@ def halt():
     sys.exit()      
           
 while True:
-    deltaTime = max(clock.tick(35), 1)
+    deltaTime = max(clock.tick(30), 1)
     ## handle quit
     for event in pygame.event.get(): # User did something 
         if event.type == pygame.QUIT: # If user clicked close
@@ -82,16 +83,16 @@ while True:
     player.yaw = max(player.yaw, 0)
     ## handle the engine stuff now
     if drawMap:
-        s = 1.2
+        s = 0.875
         pygame.draw.circle(mainscreen, (255, 255, 255), (player.x/s+W2, player.y/s+H2), 2, width=0)
         for sector in level.sectors:
             for wall in sector.walls:
-                pygame.draw.line(mainscreen, (255, 0, 0), vec2(wall.p1.x/s, wall.p1.y/s) + vec2(W2, H2), vec2(wall.p2.x/s, wall.p2.y/s) + vec2(W2, H2), 1)
+                pygame.draw.line(mainscreen, (255, 0, 0), vec2(wall.p1.x/s, wall.p1.y/s) + vec2(W2, H2)/s/s, vec2(wall.p2.x/s, wall.p2.y/s) + vec2(W2, H2)/s/s, 1)
                 # draw wall normal
                 dy, dx = raster.get_segment_normal(wall.p1.x, wall.p1.y, wall.p2.x, wall.p2.y)
                 normal = vec2(dy, dx)*4
                 midpoint = (vec2(wall.p1.x, wall.p1.y) + vec2(wall.p2.x, wall.p2.y)) / 2 / s
-                midpoint_screen = midpoint + vec2(W2, H2)
+                midpoint_screen = midpoint + vec2(W2, H2)/s/s
 
                 normal_end = midpoint_screen+normal
 

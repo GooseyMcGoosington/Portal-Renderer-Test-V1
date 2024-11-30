@@ -23,7 +23,7 @@ BLUE=(0,0,255)
 YELLOW=(255,255,0)
 TEAL=(0,255,255)
 PINK=(255,0,255)
-
+GREY=(127, 127, 127)
 segTypes = {
     'IS_CEIL':2,
     'IS_FLOOR':1,

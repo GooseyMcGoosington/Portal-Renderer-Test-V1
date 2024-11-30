@@ -16,59 +16,14 @@ class Engine:
         in_sector = self.find_sector_from_point(self.player.position.x, self.player.position.y)
         if in_sector:
             self.player.current_sector=in_sector
-            self.rasterize_sector(in_sector, 1, (1, W1, 1, H1))
-        print(self.traversed_sectors)
+            self.rasterize_sector(in_sector, None)
         self.traversed_sectors = []
         self.cs = cos[self.player.yaw]
         self.sn = sin[self.player.yaw]
-        
-    def rasterize_wall(self, x1, x2, y1, y2, z1, z2, c, clipping_bounds):
-        f = self.player.f
-
-        sx1, sy1 = raster.transformToScreen(f, (x1, y1, z1))
-        sx2, sy2 = raster.transformToScreen(f, (x2, y2, z1))
-        sy3 = raster.transformYToScreen(f, (x1, y1, z2))
-        sy4 = raster.transformYToScreen(f, (x2, y2, z2))
-
-        raster.rasterize_flat_wall(self.frame_buffer, sx1, sx2, sy1, sy2, sy3, sy4, c, clipping_bounds)
-        return (sx1, sx2, sy1, sy2, sy3, sy4)
-    
-    def get_raster_wall(self, x1, x2, y1, y2, z1, z2):
-        f = self.player.f
-        sx1, sy1 = raster.transformToScreen(f, (x1, y1, z1))
-        sx2, sy2 = raster.transformToScreen(f, (x2, y2, z1))
-        sy3 = raster.transformYToScreen(f, (x1, y1, z2))
-        sy4 = raster.transformYToScreen(f, (x2, y2, z2))
-        return (sx1, sx2, sy1, sy2, sy3, sy4)
-    
-    def rasterize_sector(self, sector: classes.Sector, count: int, clipping_bounds):
-        self.draw_sector(sector, count)
-        portals=[]
-        p_pos2D = (self.player.position.x, self.player.position.y)
-        sector_h = sector.h
-        sector_e = sector.e
-        z1 = -sector_e-sector_h+5
-        z2 = -sector_e+5
-        for segment in sector.segments:
-            r_p1 = (segment.p1.x-p_pos2D[0], segment.p1.y-p_pos2D[1])
-            r_p2 = (segment.p2.x-p_pos2D[0], segment.p2.y-p_pos2D[1])
-            wx1, wy1 = raster.transformVector(r_p1, self.cs, self.sn)
-            wx2, wy2 = raster.transformVector(r_p2, self.cs, self.sn)
-            if wy1 < 1:
-                wx1, wy1, _ = raster.clip(wx1, wy1, wx2, wy2)
-            elif wy2 < 1:
-                wx2, wy2, _ = raster.clip(wx2, wy2, wx1, wy1)
-
-            if segment.isPortal:
-                if not segment.portalID in self.traversed_sectors:
-                    self.traversed_sectors.append(segment.portalID)
-                    linked_sector = level.sectors[segment.portalLink]
-                    portals.append((linked_sector, segment))
-            else:
-                if wy1 >= 1 and wy2 >= 1:
-                    self.rasterize_wall(wx1, wx2, wy1, wy2, z1, z2, segment.c, clipping_bounds)
-
-
+    def rasterize_sector(current_sector:classes.Sector, last_sector:classes.Sector):
+        if current_sector != last_sector:
+            sector_h = current_sector.h
+            sector_e = current_sector.e
     def draw(self):
         pygame.surfarray.blit_array(self.main_screen, self.frame_buffer)
         pygame.display.update()

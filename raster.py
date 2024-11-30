@@ -36,7 +36,7 @@ def clip(ax, ay, bx, by, px1, py1, px2, py2):
 
 @staticmethod
 @njit
-def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx, cy, elevation, is_sky, lighting, c):
+def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx, cy, elevation, is_sky, lighting, c, portal_buffer, check_portal_buffer):
     tanFOV=np.tan(fov/2)
     for x in prange(1, W1):
         Y = lut[x]
@@ -57,7 +57,7 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
                 if not (x > W1 or x < 1 or y > H1 or y < 1):
                     colAvg = (screenArray[x, y][0]+screenArray[x, y][1]+screenArray[x, y][2])/3
                     isFilled = colAvg > 0
-                    if not isFilled:
+                    if (not isFilled and not check_portal_buffer) or (check_portal_buffer and not isFilled and portal_buffer[x,y] == True):
                         if not is_sky:
                             r = abs(y-H2)
                             straightDist = (elevation*f)/r
@@ -85,7 +85,7 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
                 if not (x > W1 or x < 1 or y > H1 or y < 1):
                     colAvg = (screenArray[x, y][0]+screenArray[x, y][1]+screenArray[x, y][2])/3
                     isFilled = colAvg > 0
-                    if not isFilled:
+                    if (not isFilled and not check_portal_buffer) or (check_portal_buffer and not isFilled and portal_buffer[x,y] == True):
                         if not is_sky:
                             r = abs(y-H2)
                             straightDist = (elevation*f)/r
@@ -111,10 +111,9 @@ def rasterizeVisplane(screenArray, lut, texture, texture_scale, fov, f, yaw, cx,
 
 @staticmethod
 @njit
-def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, portal_buffer, ceiling_lut, floor_lut, texture, wy0, wy1, t0, t1, wall_length, wall_height, is_sky, yaw, v_offset, lighting):
+def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, portal_buffer, ceiling_lut, floor_lut, texture, wy0, wy1, t0, t1, wall_length, wall_height, is_sky, yaw, v_offset, lighting, check_portal_buffer):
     def lerp(a, b, c):
         return (1 - a) * b + a * c
-
     dx = max(x1 - x0, 1)
     sf = wall_length * 1  # Texture scaling factor
     texLeft = lerp(t0, 0, sf)
@@ -145,16 +144,13 @@ def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, porta
             floor_lut[x] = Y2
 
         for y in prange(int(Y2), int(Y1)):
-            if 1 <= x <= W1 and 1 <= y <= H1:
+            if (x > 1 and x < W1 and y > 1 and y < H1):
                 ceiling_lut[x] = Y1
                 floor_lut[x] = Y2
 
                 colAvg = sum(screenArray[x, y]) / 3
                 isFilled = colAvg > 0
-
-                if fill_Portal:
-                    portal_buffer[x, y] = True
-                elif not isFilled:
+                if (not isFilled and not check_portal_buffer) or (check_portal_buffer and not isFilled and portal_buffer[x,y] == True):
                     if is_sky:
                         if y < texture.shape[1]:
                             texY = y % texture.shape[1]
@@ -166,46 +162,36 @@ def rasterizeTextured(screenArray, x0, x1, y0, y1, y2, y3, c, fill_Portal, porta
                         v = lerp(a*wall_height*0.1, 0, 1)
                         texY = int(v * texture.shape[1] + v_offset) % texture.shape[1]
                         texture_col = texture[texX, texY]
-                        screenArray[x, y] = (
-                            texture_col[0],
-                            texture_col[1],
-                            texture_col[2],
-                        )
+                        screenArray[x, y] = (texture_col[0],texture_col[1],texture_col[2])
     return ceiling_lut, floor_lut
-
 
 @staticmethod
 @njit
-def rasterizePortal(screenArray, portalArray, x0, x1, y0, y1, y2, y3, c, lighting):
-    dx = max(x1-x0, 1)
+def rasterizePortal(screenArray, x0, x1, y0, y1, y2, y3, c, portal_buffer, clipping_bounds):
+    def lerp(a, b, c):
+        return (1 - a) * b + a * c
+    dx = max(x1 - x0, 1)
 
     X0 = max(min(int(x0), W1), 1)
     X1 = max(min(int(x1), W1), 1)
-    def lerp(a, b, c):
-        return (1 - a) * b + a * c
 
-    full = False
-    if abs(X1-X0) == 0:
-        X0 = 1
-        X1 = W1
-        full = True
-
+    full = True
     for x in prange(int(X0), int(X1)):
-        if not full:
-            t = (x - x0) / dx
-            Y1 = int(lerp(t, y0, y1))
-            Y2 = int(lerp(t, y2, y3))
-        else:
-            Y2 = 1
-            Y1 = H1
-
+        # Interpolated Y coordinates
+        t = (x - x0) / dx
+        Y1 = max(min(int(lerp(t, y0, y1)), H1), 1)
+        Y2 = max(min(int(lerp(t, y2, y3)), H1), 1)
         for y in prange(int(Y2), int(Y1)):
-            if not (x > W1 or x < 1 or y > H1 or y < 1):
-                isFilled = screenArray[x, y][0] > 0 or screenArray[x, y][1] > 0 or screenArray[x, y][2] > 0
-                if not isFilled:
-                    return False
-    return True
+            if (x > 1 and x < W1 and y > 1 and y < H1) and (x > clipping_bounds[0] and x < clipping_bounds[1] and y > clipping_bounds[2] and y < clipping_bounds[3]):
+                ceiling_lut[x] = Y1
+                floor_lut[x] = Y2
 
+                colAvg = sum(screenArray[x, y]) / 3
+                isFilled = colAvg > 0
+                if not isFilled:
+                    if portal_buffer[x,y] == False:
+                        portal_buffer[x, y] = True
+                #screenArray[x, y] = c
 @staticmethod
 @njit
 def rasterizeSprite(screenArray, entity_x, entity_y, sprite, entity_depth, entity_scale, f):
